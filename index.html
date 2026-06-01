@@ -13,6 +13,7 @@
 <title>COMEX GOLD TRADING</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,600;1,300&family=Geist+Mono:wght@300;400&family=DM+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
 <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
@@ -995,7 +996,8 @@ body.light .wh-lbl,.wallet-hero .wh-lbl{color:rgba(255,255,255,0.75);}
   <div style="font-size:11px;color:var(--text3);letter-spacing:.12em;text-transform:uppercase;margin-bottom:28px;">OTP Verification</div>
   <div style="max-width:320px;width:100%;background:rgba(255,255,255,.06);backdrop-filter:blur(20px);border:1px solid rgba(201,168,76,.25);border-radius:24px;padding:28px 22px;">
     <div style="font-size:13px;color:var(--text2);margin-bottom:6px;">Enter the 6-digit verification code</div>
-    <div style="font-size:11px;color:var(--gold);opacity:.7;margin-bottom:22px;">Provided by Admin via phone/WhatsApp</div>
+    <div style="font-size:11px;color:var(--gold);opacity:.7;margin-bottom:10px;">Provided by Admin via support chat</div>
+    <div style="font-size:11px;color:var(--text3);line-height:1.65;margin-bottom:22px;">After Admin accepts your registration, wait for the OTP inside <strong style="color:var(--gold2)">Chat with Support</strong>.</div>
     <div style="display:flex;align-items:center;justify-content:center;gap:16px;">
       <input id="otpInput" type="number" maxlength="6" placeholder="000000"
         style="width:150px;height:56px;background:rgba(255,255,255,.08);border:2px solid rgba(201,168,76,.35);border-radius:14px;font-size:26px;font-weight:700;text-align:center;color:var(--text);font-family:'DM Sans',sans-serif;outline:none;letter-spacing:5px;-moz-appearance:textfield;"
@@ -1004,6 +1006,12 @@ body.light .wh-lbl,.wallet-hero .wh-lbl{color:rgba(255,255,255,0.75);}
         style="height:56px;padding:0 24px;background:linear-gradient(135deg,var(--gold),var(--gold2));border:none;border-radius:14px;color:#000;font-weight:800;font-size:14px;font-family:'DM Sans',sans-serif;cursor:pointer;box-shadow:0 4px 18px rgba(201,168,76,.4);">Login</button>
     </div>
     <div id="otpErr" style="font-size:12px;color:#ff6b78;min-height:16px;margin-top:14px;"></div>
+  </div>
+  <div style="margin-top:18px;text-align:center;">
+    <button id="otpSupportBtn" onclick="openChat()" style="position:relative;background:linear-gradient(135deg,rgba(201,168,76,.15),rgba(201,168,76,.25));border:1px solid rgba(201,168,76,.4);border-radius:22px;padding:11px 28px;color:var(--gold,#C9A84C);font-size:13px;font-weight:600;cursor:pointer;display:inline-flex;align-items:center;gap:8px;">
+      <span>💬 Chat with Support</span>
+      <span id="otpSupportBadge" style="display:none;min-width:18px;height:18px;border-radius:999px;background:#ff4757;color:#fff;font-size:10px;font-weight:800;align-items:center;justify-content:center;padding:0 5px;box-shadow:0 0 0 2px rgba(0,0,0,.2);">0</span>
+    </button>
   </div>
   <button onclick="doSignOut()" style="margin-top:20px;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.12);color:rgba(255,255,255,.45);border-radius:12px;padding:9px 22px;cursor:pointer;font-family:'DM Sans',sans-serif;font-size:12px;">Sign Out</button>
 </div>
@@ -1332,9 +1340,16 @@ body.light .wh-lbl,.wallet-hero .wh-lbl{color:rgba(255,255,255,0.75);}
       </div>
     </div>
     <div class="chat-input-row">
-      <div class="chat-inp" contenteditable="true" id="chatInp">Message...</div>
-      <div class="chat-send" onclick="sendMsg()">➤</div>
-    </div>
+    <input type="file" id="imageUpload" accept="image/*" style="display:none;">
+    <i class="fa-regular fa-image"
+       onclick="document.getElementById('imageUpload').click()"
+       style="cursor:pointer;font-size:1.1rem;padding:0 10px;opacity:0.55;flex-shrink:0;display:flex;align-items:center;transition:opacity 0.2s;"
+       onmouseenter="this.style.opacity='1'"
+       onmouseleave="this.style.opacity='0.55'"
+       title="Send photo"></i>
+    <div class="chat-inp" contenteditable="true" id="chatInp">Message...</div>
+    <div class="chat-send" onclick="sendMsg()">></div>
+</div>
   </div>
 </div>
 
@@ -1457,6 +1472,16 @@ const firebaseConfig = {
 let app, auth, db;
 try { app=firebase.initializeApp(firebaseConfig); auth=firebase.auth(); db=firebase.firestore(); }
 catch(e){ console.warn('Firebase:',e.message); }
+const EXPLICIT_SIGNOUT_KEY='comexExplicitSignOut';
+async function initAuthPersistence(){
+  if(!auth || !firebase?.auth?.Auth?.Persistence?.LOCAL) return;
+  try{
+    await auth.setPersistence(firebase.auth.Auth.Persistence.LOCAL);
+  }catch(e){
+    console.warn('Auth persistence:',e.message);
+  }
+}
+initAuthPersistence();
 
 // ================================================================
 // GUEST CHAT ID
@@ -1483,6 +1508,7 @@ const LANG_META = {
 let currentUser   = null;
 let walletUnsub   = null;
 let chatUnsub     = null;
+let chatMetaUnsub = null;
 let pendingUnsub  = null;
 let tradeUnsub    = null;
 let changeReqUnsub = null;
@@ -1704,6 +1730,47 @@ function clearCachedPasswordRequest(){
 function getCachedPasswordRequest(){
   try{return JSON.parse(localStorage.getItem(PASSWORD_REQ_CACHE_KEY)||'null');}
   catch(_){return null;}
+}
+function getActiveChatId(){
+  return currentUser ? currentUser.uid : guestChatId;
+}
+function updateOtpSupportBadge(count){
+  const badge=document.getElementById('otpSupportBadge');
+  if(!badge) return;
+  const total=Math.max(0,Number(count||0));
+  badge.textContent=total>99?'99+':String(total);
+  badge.style.display=total>0?'inline-flex':'none';
+}
+function stopChatMetaListener(){
+  if(chatMetaUnsub){chatMetaUnsub();chatMetaUnsub=null;}
+  updateOtpSupportBadge(0);
+}
+function startChatMetaListener(chatId){
+  if(!db || !chatId){
+    stopChatMetaListener();
+    return;
+  }
+  if(chatMetaUnsub){chatMetaUnsub();chatMetaUnsub=null;}
+  chatMetaUnsub=db.collection('chats').doc(chatId).onSnapshot(snap=>{
+    const data=snap.data()||{};
+    updateOtpSupportBadge(Number(data.unreadUser||0));
+  },e=>{
+    console.warn('Chat meta listener:',e.message||e);
+    updateOtpSupportBadge(0);
+  });
+}
+async function markSupportMessagesRead(){
+  const chatId=getActiveChatId();
+  if(!currentUser || !chatId || !db){
+    updateOtpSupportBadge(0);
+    return;
+  }
+  updateOtpSupportBadge(0);
+  try{
+    await db.collection('chats').doc(chatId).set({unreadUser:0},{merge:true});
+  }catch(e){
+    console.warn('Chat unread reset:',e.message);
+  }
 }
 async function finalizeApprovedPasswordChange(req){
   const cache=getCachedPasswordRequest();
@@ -2021,7 +2088,11 @@ function goToLanding(){ hideAll(); document.getElementById('landingScreen').styl
 function goToSignUp() { hideAll(); document.getElementById('authScreen').style.display='flex'; showAuthTab('register'); }
 function goToSignIn() { hideAll(); document.getElementById('authScreen').style.display='flex'; showAuthTab('login'); }
 function showPending(){ hideAll(); document.getElementById('pendingScreen').style.display='flex'; }
-function showOTP()    { hideAll(); document.getElementById('otpScreen').style.display='flex'; }
+function showOTP(){
+  hideAll();
+  document.getElementById('otpScreen').style.display='flex';
+  startChatMetaListener(auth?.currentUser?.uid || currentUser?.uid);
+}
 function showApp(data){
   if(!data) data={};
   currentUser={...(currentUser||{}),...data};
@@ -2070,17 +2141,37 @@ function checkMmPhone(input, flagId){
   flag.style.display=show?'block':'none';
   input.classList.toggle('has-flag',show);
 }
+function showLandingFallbackIfNeeded(){
+  const splash=document.getElementById('appSplash');
+  const mainApp=document.getElementById('mainApp');
+  const landing=document.getElementById('landingScreen');
+  const authScreen=document.getElementById('authScreen');
+  const pending=document.getElementById('pendingScreen');
+  const otp=document.getElementById('otpScreen');
+  const appVisible=mainApp && mainApp.style.display==='block';
+  const authVisible=authScreen && authScreen.style.display==='flex';
+  const pendingVisible=pending && pending.style.display==='flex';
+  const otpVisible=otp && otp.style.display==='flex';
+  if(_authResolved || currentUser || auth?.currentUser || appVisible || authVisible || pendingVisible || otpVisible){
+    if(splash){
+      splash.style.opacity='0';
+      setTimeout(()=>{ if(splash.parentNode)splash.remove(); },400);
+    }
+    return;
+  }
+  if(splash){
+    splash.style.opacity='0';
+    setTimeout(()=>{ if(splash.parentNode)splash.remove(); },400);
+  }
+  if(landing && landing.style.display==='none') goToLanding();
+}
 
 // ================================================================
 // BLACK SCREEN FALLBACK — 5 sec timeout
 // ================================================================
 let _authResolved = false;
 setTimeout(()=>{
-  if(!_authResolved){
-    const splash=document.getElementById('appSplash');
-    if(splash){ splash.style.opacity='0'; setTimeout(()=>{ if(splash.parentNode)splash.remove(); },400); }
-    goToLanding();
-  }
+  showLandingFallbackIfNeeded();
 }, 5000);
 
 // ================================================================
@@ -2095,6 +2186,7 @@ if(auth){
       return;
     }
     if(user){
+      localStorage.removeItem(EXPLICIT_SIGNOUT_KEY);
       const removeSplash=()=>{ const s=document.getElementById('appSplash');if(s){s.style.opacity='0';setTimeout(()=>s.remove(),350);} };
       try{
         let snap=await db.collection('users').doc(user.uid).get();
@@ -2104,6 +2196,7 @@ if(auth){
         }
         const data=snap.data()||{};
         currentUser={uid:user.uid,balance:{usd:0,wg:0,mmk:0},trade_history:[],...data};
+        startChatMetaListener(user.uid);
         if(currentUser.preferredLanguage) curLang=currentUser.preferredLanguage;
         if(currentUser.preferredTheme) manualTheme=currentUser.preferredTheme;
         localStorage.setItem('preferredLanguage',curLang||DEFAULT_LANG);
@@ -2113,7 +2206,7 @@ if(auth){
         if(data.status==='pending'){
           showPending();
           startPendingListener(user.uid);
-        } else if(data.otpCode){
+        } else if((data.status==='active' && data.otpVerified!==true) || (data.otpCode && !data.otpVerified)){
           showOTP();
         } else {
           showApp(currentUser);
@@ -2124,6 +2217,7 @@ if(auth){
       }catch(e){
         console.warn('Firestore read failed:',e.message);
         currentUser={uid:user.uid,realName:user.displayName||'Trader',email:user.email||'',balance:{usd:0,wg:0,mmk:0},trade_history:[],kyc_verified:false};
+        startChatMetaListener(user.uid);
         const removeSplash=()=>{ const s=document.getElementById('appSplash');if(s){s.style.opacity='0';setTimeout(()=>s.remove(),350);} };
         showApp(currentUser); removeSplash();
         startChatListener(user.uid);
@@ -2134,7 +2228,9 @@ if(auth){
       if(walletUnsub){walletUnsub();walletUnsub=null;}
       if(chatUnsub){chatUnsub();chatUnsub=null;}
       if(pendingUnsub){pendingUnsub();pendingUnsub=null;}
+      if(chatMetaUnsub){chatMetaUnsub();chatMetaUnsub=null;}
       if(changeReqUnsub){changeReqUnsub();changeReqUnsub=null;}
+      updateOtpSupportBadge(0);
       const splash=document.getElementById('appSplash');
       if(splash){ splash.style.opacity='0'; setTimeout(()=>splash.remove(),400); }
       goToLanding();
@@ -2152,7 +2248,7 @@ function startPendingListener(uid){
     currentUser={...currentUser,...d};
     if(d.status==='active'){
       if(pendingUnsub){pendingUnsub();pendingUnsub=null;}
-      if(d.otpCode && !d.otpVerified){
+      if(d.otpVerified!==true){
         showOTP();
       } else {
         showApp(d);
@@ -2235,6 +2331,7 @@ async function doRegister(){
   const btn=document.getElementById('regBtn');
   btn.textContent='Creating...'; btn.disabled=true;
   _registering=true;
+  localStorage.removeItem(EXPLICIT_SIGNOUT_KEY);
 
   try{
     const cred=await auth.createUserWithEmailAndPassword(email,pass);
@@ -2242,6 +2339,7 @@ async function doRegister(){
     const seqLabel=await createUserDoc(uid,name,uname,contact,email,regMethod);
     currentUser={uid,seqLabel,realName:name,username:uname,contact,email,status:'pending',level:'standard',kyc_verified:false,kycSubmitted:false,kycStatus:'',balance:{usd:0,wg:0,mmk:0},trade_history:[],preferredLanguage:curLang,preferredTheme:manualTheme,lastOpenTab:'profile'};
     _registering=false;
+    startChatMetaListener(uid);
     showPending();
     startPendingListener(uid);
   }catch(e){
@@ -2261,6 +2359,7 @@ async function doGoogleSignIn(){
   provider.addScope('email');
   provider.addScope('profile');
   _registering=true;
+  localStorage.removeItem(EXPLICIT_SIGNOUT_KEY);
   try{
     const result=await auth.signInWithPopup(provider);
     const user=result.user;
@@ -2296,6 +2395,7 @@ async function doLogin(){
 
   const btn=document.getElementById('loginBtn');
   btn.textContent='...'; btn.disabled=true;
+  localStorage.removeItem(EXPLICIT_SIGNOUT_KEY);
 
   const digits=phone.replace(/[^0-9]/g,'');
   const email=digits+'@comex.gold.trade';
@@ -2354,7 +2454,10 @@ async function doSignOut(){
   if(walletUnsub){walletUnsub();walletUnsub=null;}
   if(chatUnsub){chatUnsub();chatUnsub=null;}
   if(pendingUnsub){pendingUnsub();pendingUnsub=null;}
+  if(chatMetaUnsub){chatMetaUnsub();chatMetaUnsub=null;}
   if(changeReqUnsub){changeReqUnsub();changeReqUnsub=null;}
+  updateOtpSupportBadge(0);
+  localStorage.setItem(EXPLICIT_SIGNOUT_KEY,'1');
   if(auth) await auth.signOut();
   currentUser=null;
   goToLanding();
@@ -2970,7 +3073,11 @@ function startChatListener(uid){
     }
     snap.docs.forEach(doc=>{
       const msg=doc.data()||{};
-      appendChatMsg(msg.text,msg.sender,false,msg.timestamp);
+      if(msg.type==='image' && msg.imageData){
+        appendChatMsg(null,msg.sender,false,msg.timestamp,msg.imageData);
+      } else {
+        appendChatMsg(msg.text,msg.sender,false,msg.timestamp);
+      }
     });
   },e=>console.warn(e));
 }
@@ -2991,16 +3098,19 @@ function formatChatMeta(sender,timestamp){
   if(timestamp?.toDate) return timestamp.toDate().toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'});
   return 'You';
 }
-function appendChatMsg(text,sender,isStatic=false,timestamp=null){
+function appendChatMsg(text,sender,isStatic=false,timestamp=null,imageData=null){
   const msgs=document.getElementById('chatMsgs');if(!msgs)return;
   const div=document.createElement('div');
+  const imgHtml = imageData
+    ? `<img src="${imageData}" alt="Photo" style="max-width:220px;max-height:220px;border-radius:10px;display:block;cursor:pointer;" onclick="this.style.maxWidth=this.style.maxWidth==='none'?'220px':'none'"/>`
+    : `<p>${escH(text||'')}</p>`;
   if(sender==='admin'){
     div.className='msg-row';
-    div.innerHTML=`<img class="msg-av support-avatar" src="${getSupportAvatarSrc()}" alt="COMEX GOLD"><div class="msg-bub"><p ${isStatic?'data-static-greeting="1"':''}>${escH(text)}</p><div class="msg-t">${formatChatMeta(sender,timestamp)}</div></div>`;
+    div.innerHTML=`<img class="msg-av support-avatar" src="${getSupportAvatarSrc()}" alt="COMEX GOLD"><div class="msg-bub" ${imageData?'style="padding:6px;background:transparent;box-shadow:none;"':''}>${isStatic&&!imageData?`<p data-static-greeting="1">${escH(text||'')}</p>`:imgHtml}<div class="msg-t">${formatChatMeta(sender,timestamp)}</div></div>`;
   } else {
     const userName=currentUser?.realName||currentUser?.username||'You';
     div.className='msg-row user-row';
-    div.innerHTML=`<img class="msg-av" src="${getUserAvatarSrc()}" alt="User"><div class="msg-stack"><div class="msg-user-meta"><span>${escH(userName)}</span></div><div class="msg-bub user-bub"><p>${escH(text)}</p><div class="msg-t">${formatChatMeta(sender,timestamp)}</div></div></div>`;
+    div.innerHTML=`<img class="msg-av" src="${getUserAvatarSrc()}" alt="User"><div class="msg-stack"><div class="msg-user-meta"><span>${escH(userName)}</span></div><div class="msg-bub user-bub" ${imageData?'style="padding:6px;background:transparent;box-shadow:none;"':''}>${imgHtml}<div class="msg-t">${formatChatMeta(sender,timestamp)}</div></div></div>`;
   }
   msgs.appendChild(div);msgs.scrollTop=msgs.scrollHeight;
 }
@@ -3010,9 +3120,10 @@ function openChat(){
   o.style.zIndex='9800';
   o.style.display='flex';
   syncSupportAvatars();
-  const chatId = currentUser ? currentUser.uid : guestChatId;
+  const chatId = getActiveChatId();
   if(chatId) ensureChatThreadMeta().catch(e=>console.warn('chat meta sync failed',e));
   startChatListener(chatId);
+  if(currentUser) markSupportMessagesRead();
   const inp=document.getElementById('chatInp'); if(inp) inp.textContent=t('messagePlaceholder');
   setTimeout(()=>{const m=document.getElementById('chatMsgs');if(m)m.scrollTop=m.scrollHeight;},100);
 }
@@ -3020,11 +3131,87 @@ function closeChat(){
   const o=document.getElementById('chatOverlay');if(o)o.style.display='none';
   if(!currentUser && chatUnsub){chatUnsub();chatUnsub=null;}
 }
+document.addEventListener('DOMContentLoaded', function () {
+    const imgUpload = document.getElementById('imageUpload');
+    if (imgUpload) {
+        imgUpload.addEventListener('change', async function () {
+            const file = this.files[0];
+            if (!file || !file.type.startsWith('image/')) return;
+            this.value = '';
+            try {
+                const dataUrl = await compressImageToBase64(file, 800, 0.72);
+                appendImageMessage(dataUrl);
+                await sendImageToFirestore(dataUrl);
+            } catch(err) {
+                console.error('Image send error:', err);
+            }
+        });
+    }
+});
+
+function compressImageToBase64(file, maxPx, quality) {
+    return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onerror = reject;
+        reader.onload = function(e) {
+            const img = new Image();
+            img.onerror = reject;
+            img.onload = function() {
+                let w = img.width, h = img.height;
+                if (w > maxPx || h > maxPx) {
+                    if (w > h) { h = Math.round(h * maxPx / w); w = maxPx; }
+                    else { w = Math.round(w * maxPx / h); h = maxPx; }
+                }
+                const canvas = document.createElement('canvas');
+                canvas.width = w; canvas.height = h;
+                canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+                resolve(canvas.toDataURL('image/jpeg', quality));
+            };
+            img.src = e.target.result;
+        };
+        reader.readAsDataURL(file);
+    });
+}
+
+function appendImageMessage(dataUrl) {
+    const chatMsgs = document.getElementById('chatMsgs');
+    const msgRow = document.createElement('div');
+    msgRow.className = 'msg-row';
+    msgRow.style.justifyContent = 'flex-end';
+    msgRow.innerHTML = `
+        <div class="msg-bub" style="padding:6px;background:transparent;box-shadow:none;">
+            <img src="${dataUrl}" alt="Sent image"
+                style="max-width:220px;max-height:220px;border-radius:12px;display:block;cursor:pointer;"
+                onclick="this.style.maxWidth=this.style.maxWidth==='none'?'220px':'none'"/>
+            <div class="msg-t" style="text-align:right;margin-top:4px;">Now</div>
+        </div>`;
+    chatMsgs.appendChild(msgRow);
+    chatMsgs.scrollTop = chatMsgs.scrollHeight;
+}
+
+async function sendImageToFirestore(dataUrl) {
+    const chatId = getActiveChatId();
+    try {
+        await ensureChatThreadMeta();
+        await db.collection('chats').doc(chatId).collection('messages').add({
+            imageData: dataUrl,
+            type: 'image',
+            sender: 'user',
+            ...getChatIdentityMeta(),
+            timestamp: firebase.firestore.FieldValue.serverTimestamp()
+        });
+        await ensureChatThreadMeta({
+            lastMsg: '[Photo]',
+            lastMsgAt: firebase.firestore.FieldValue.serverTimestamp(),
+            unreadAdmin: firebase.firestore.FieldValue.increment(1)
+        });
+    } catch(e) { console.error('Firestore image save error:', e); }
+}
 function closeChatOut(e){if(e.target===document.getElementById('chatOverlay'))closeChat();}
 async function sendMsg(){
   const inp=document.getElementById('chatInp');const txt=inp?.textContent?.trim()||'';
   if(!txt||txt===t('messagePlaceholder'))return;if(inp)inp.textContent='';
-  const chatId = currentUser ? currentUser.uid : guestChatId;
+  const chatId = getActiveChatId();
   try{
     await ensureChatThreadMeta();
     await db.collection('chats').doc(chatId).collection('messages').add({
@@ -3213,13 +3400,8 @@ window.addEventListener('DOMContentLoaded',()=>{
       }
     });
   }
-  // Fallback: if Firebase takes too long, hide splash and show landing after 5s
-  setTimeout(()=>{
-    const splash=document.getElementById('appSplash');
-    if(splash){splash.style.opacity='0';setTimeout(()=>{if(splash.parentNode)splash.remove();},400);}
-    const ls=document.getElementById('landingScreen');
-    if(ls && ls.style.display==='none') ls.style.display='block';
-  }, 5000);
+  // Fallback: only reveal landing if auth did not resolve and no active session is visible.
+  setTimeout(showLandingFallbackIfNeeded, 5200);
 });
 </script>
 <!-- KYC PENDING OVERLAY (after submission) -->
