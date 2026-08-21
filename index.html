@@ -1254,6 +1254,19 @@ body.light .wh-lbl,.wallet-hero .wh-lbl{color:rgba(255,255,255,0.75);}
             <span class="sheet-close" onclick="closeOverlayById('accountLevelOverlay')">✕</span>
           </div>
           <div class="level-ribbon" id="levelRibbon">Standard Member</div>
+          <div class="level-progress-wrap" id="levelProgressWrap" style="margin:14px 0 18px">
+            <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--subtext);margin-bottom:6px;font-weight:700">
+              <span id="levelProgressCur">Standard Member</span>
+              <span id="levelProgressNext">Trader Account</span>
+            </div>
+            <div style="height:9px;border-radius:6px;background:rgba(255,255,255,.08);overflow:hidden;box-shadow:inset 0 1px 2px rgba(0,0,0,.3)">
+              <div id="levelProgressBar" style="height:100%;width:0%;border-radius:6px;background:linear-gradient(90deg,#c9982e,var(--gold2));transition:width .6s cubic-bezier(.4,0,.2,1)"></div>
+            </div>
+            <div style="display:flex;justify-content:space-between;margin-top:7px;font-size:12px">
+              <span id="levelProgressAmt" style="color:var(--text);font-weight:700">$0 / $3,000</span>
+            </div>
+            <div id="levelProgressRemain" style="font-size:11px;color:var(--subtext);margin-top:4px"></div>
+          </div>
           <div class="level-list" id="levelPathList"></div>
           <div class="timeline-list" id="accountTimelineList"></div>
           <button class="cta-link" onclick="closeOverlayById('accountLevelOverlay');openChat()">COMEX ADMIN TEAM ထံသို့ ဆက်သွယ်ရန်</button>
@@ -1479,6 +1492,7 @@ body.light .wh-lbl,.wallet-hero .wh-lbl{color:rgba(255,255,255,0.75);}
 const firebaseConfig = {
   apiKey: "AIzaSyA8FRrFcrkkHGgPwPkiRCY90-SOueRLrDY",
   authDomain: "comex-gold.firebaseapp.com",
+  databaseURL: "https://comex-gold-default-rtdb.asia-southeast1.firebasedatabase.app",
   projectId: "comex-gold",
   storageBucket: "comex-gold.firebasestorage.app",
   messagingSenderId: "698161924390",
@@ -1693,6 +1707,51 @@ function getLevelMeta(level){
     vvip:{label:'VVIP',sub:'Luxury Gold premium desk active',cls:'level-vvip'},
   };
   return map[normalized] || map.standard;
+}
+// Progress ("Rating") toward the next account level, driven by cumulative deposit amount.
+const LEVEL_MIN_DEPOSIT = {standard:0,trader:3000,vip1:10000,vip2:30000,vip3:50000,vvip:50000.01};
+function computeLevelProgress(totalDeposited){
+  const t=Number(totalDeposited||0);
+  const order=['standard','trader','vip1','vip2','vip3','vvip'];
+  let idx=0;
+  for(let i=0;i<order.length;i++){ if(t>=LEVEL_MIN_DEPOSIT[order[i]]) idx=i; }
+  const currentKey=order[idx];
+  const nextKey=order[idx+1] || null;
+  if(!nextKey){
+    return {currentKey,nextKey:null,percent:100,remaining:0,curAmt:t,nextAmt:null};
+  }
+  const base=LEVEL_MIN_DEPOSIT[currentKey];
+  const target=LEVEL_MIN_DEPOSIT[nextKey];
+  const span=target-base;
+  const progressed=Math.max(0,t-base);
+  const percent=Math.max(0,Math.min(100,Math.round((progressed/span)*100)));
+  const remaining=Math.max(0,Math.ceil(target-t));
+  return {currentKey,nextKey,percent,remaining,curAmt:t,nextAmt:Math.floor(target)};
+}
+function renderLevelProgress(data=currentUser||{}){
+  const wrap=document.getElementById('levelProgressWrap');
+  if(!wrap) return;
+  const p=computeLevelProgress(data.totalDeposited);
+  const curMeta=getLevelMeta(p.currentKey);
+  const curEl=document.getElementById('levelProgressCur');
+  const nextEl=document.getElementById('levelProgressNext');
+  const amtEl=document.getElementById('levelProgressAmt');
+  const remainEl=document.getElementById('levelProgressRemain');
+  const bar=document.getElementById('levelProgressBar');
+  if(curEl) curEl.textContent=curMeta.label;
+  if(p.nextKey){
+    const nextMeta=getLevelMeta(p.nextKey);
+    if(nextEl) nextEl.textContent=nextMeta.label;
+    if(amtEl) amtEl.textContent=`$${Number(p.curAmt||0).toLocaleString()} / $${Number(p.nextAmt).toLocaleString()}`;
+    if(remainEl) remainEl.textContent=(curLang==='mm'
+      ? `${nextMeta.label} အဆင့်ရောက်ရန် ဒေါ်လာ $${Number(p.remaining).toLocaleString()} ထပ်ဖြည့်ရန် လိုအပ်ပါသည်။`
+      : `$${Number(p.remaining).toLocaleString()} more to reach ${nextMeta.label}.`);
+  }else{
+    if(nextEl) nextEl.textContent=curLang==='mm'?'အမြင့်ဆုံးအဆင့်':'Maximum Level';
+    if(amtEl) amtEl.textContent=`$${Number(p.curAmt||0).toLocaleString()}`;
+    if(remainEl) remainEl.textContent=curLang==='mm'?'🏆 အကောင့်အမြင့်ဆုံးအဆင့်သို့ ရောက်ရှိပြီးဖြစ်ပါသည်။':'🏆 You have reached the highest account level.';
+  }
+  if(bar) bar.style.width=p.percent+'%';
 }
 function formatStamp(value){
   if(!value) return 'Pending';
@@ -2034,6 +2093,7 @@ function renderAccountLevelModal(data=currentUser||{}){
   list.innerHTML=timeline.length
     ? timeline.map(item=>`<div class="timeline-item"><div class="timeline-dot"></div><div class="timeline-card"><div class="timeline-title">${escH(item.title)}</div><div class="timeline-meta">${escH(item.meta)}</div></div></div>`).join('')
     : `<div class="timeline-empty">No account timeline available yet.</div>`;
+  renderLevelProgress(data);
 }
 function openAccountLevel(){
   renderProfileHeader(currentUser||{});
@@ -2531,6 +2591,7 @@ function startWalletListener(uid){
     syncSecurityModalStates(currentUser);
     maybeAutoUpgradeLevel(uid,d);
     updateVipAnnounceBellVisibility(d.level);
+    renderLevelProgress(d);
     // Admin revokes or suspends
     if(d.status==='rejected'||d.status==='suspended'){ doSignOut(); }
   },e=>console.warn(e));
