@@ -1037,6 +1037,9 @@ body.light .wh-lbl,.wallet-hero .wh-lbl{color:rgba(255,255,255,0.75);}
           <div><div class="logo-text">COMEX GOLD TRADING</div><div class="logo-sub">Gold • Crypto • Oil</div></div>
         </div>
         <div class="hdr-actions">
+          <div class="hdr-btn" id="vipAnnounceBtn" style="display:none" onclick="openVipAnnouncements()">
+            <span style="font-size:18px">👑</span><div class="badge-dot" id="vipAnnounceBadge"></div>
+          </div>
           <div class="hdr-btn" onclick="openNotif()">
             <span style="font-size:18px">🔔</span><div class="badge-dot"></div>
           </div>
@@ -1279,6 +1282,19 @@ body.light .wh-lbl,.wallet-hero .wh-lbl{color:rgba(255,255,255,0.75);}
             <div class="vip-card"><strong>Market 6</strong><span>VIP desk support, account upgrade paths, and tailored profit planning.</span></div>
           </div>
           <button class="cta-link" onclick="closeOverlayById('vipPlanOverlay');openChat()">COMEX ADMIN TEAM ထံသို့ ဆက်သွယ်ရန်</button>
+        </div>
+      </div>
+
+      <div class="overlay" id="vipAnnounceOverlay" onclick="closeProfileCard(event,'vipAnnounceOverlay')">
+        <div class="vip-modal-card">
+          <div class="sheet-hdr" style="padding:0 0 14px;border-bottom:1px solid var(--b);margin-bottom:16px">
+            <div>
+              <div class="sheet-title">👑 VIP Announcements</div>
+              <div class="modal-sub">Promotions and updates from the COMEX Admin Team, for VIP members only.</div>
+            </div>
+            <span class="sheet-close" onclick="closeOverlayById('vipAnnounceOverlay')">✕</span>
+          </div>
+          <div id="vipAnnounceList" style="display:flex;flex-direction:column;gap:10px;max-height:60vh;overflow-y:auto"></div>
         </div>
       </div>
     </div>
@@ -1637,6 +1653,34 @@ function normalizeLevel(level){
   if(raw==='standardmember'||raw==='standard') return 'standard';
   if(raw==='vip1'||raw==='vip2'||raw==='vip3'||raw==='vvip') return raw;
   return 'standard';
+}
+// Auto Trader/VIP level computed from cumulative approved deposit amount (USD)
+function computeAutoLevel(totalDeposited){
+  const t=Number(totalDeposited||0);
+  if(t>50000) return 'vvip';
+  if(t>=50000) return 'vip3';
+  if(t>=30000) return 'vip2';
+  if(t>=10000) return 'vip1';
+  if(t>=3000) return 'trader';
+  return 'standard';
+}
+function isVipOrAbove(level){
+  return LEVEL_FLOW.indexOf(normalizeLevel(level))>=LEVEL_FLOW.indexOf('vip1');
+}
+// Upgrades user.level automatically based on totalDeposited; never downgrades a manually-set higher level.
+async function maybeAutoUpgradeLevel(uid,data){
+  if(!data) return;
+  const autoLevel=computeAutoLevel(data.totalDeposited);
+  const curIdx=LEVEL_FLOW.indexOf(normalizeLevel(data.level));
+  const autoIdx=LEVEL_FLOW.indexOf(autoLevel);
+  if(autoIdx>curIdx){
+    try{
+      await db.collection('users').doc(uid).set({
+        level:autoLevel,
+        accountLevelTimeline:firebase.firestore.FieldValue.arrayUnion({title:'Auto level-up',meta:getLevelMeta(autoLevel).label,ts:Date.now()})
+      },{merge:true});
+    }catch(e){console.warn('Auto level-up sync:',e.message);}
+  }
 }
 function getLevelMeta(level){
   const normalized=normalizeLevel(level);
@@ -2485,9 +2529,65 @@ function startWalletListener(uid){
     updateKycStatus(d);
     renderProfileHeader(currentUser);
     syncSecurityModalStates(currentUser);
+    maybeAutoUpgradeLevel(uid,d);
+    updateVipAnnounceBellVisibility(d.level);
     // Admin revokes or suspends
     if(d.status==='rejected'||d.status==='suspended'){ doSignOut(); }
   },e=>console.warn(e));
+}
+
+// ================================================================
+// VIP ANNOUNCEMENT BELL (VIP1+ only)
+// ================================================================
+let vipAnnounceUnsub=null;
+function updateVipAnnounceBellVisibility(level){
+  const btn=document.getElementById('vipAnnounceBtn');
+  if(!btn) return;
+  if(isVipOrAbove(level)){
+    btn.style.display='flex';
+    startVipAnnounceListener();
+  }else{
+    btn.style.display='none';
+    if(vipAnnounceUnsub){ vipAnnounceUnsub(); vipAnnounceUnsub=null; }
+    const badge=document.getElementById('vipAnnounceBadge');
+    if(badge) badge.classList.remove('show');
+  }
+}
+function startVipAnnounceListener(){
+  if(vipAnnounceUnsub) return;
+  vipAnnounceUnsub=db.collection('announcements').orderBy('createdAt','desc').limit(20)
+    .onSnapshot(snap=>{
+      const items=[];
+      snap.forEach(doc=>{
+        const x=doc.data();
+        const ms=x.createdAt&&x.createdAt.toDate?x.createdAt.toDate().getTime():Number(x.createdAt||0);
+        items.push({id:doc.id,...x,_ms:ms});
+      });
+      window.__vipAnnounceItems=items;
+      const lastSeen=Number(currentUser?.lastSeenAnnouncement||0);
+      const hasUnread=items.some(x=>x._ms>lastSeen);
+      const badge=document.getElementById('vipAnnounceBadge');
+      if(badge) badge.classList.toggle('show',hasUnread);
+    },e=>console.warn('Announcements:',e.message));
+}
+function openVipAnnouncements(){
+  const list=document.getElementById('vipAnnounceList');
+  const items=window.__vipAnnounceItems||[];
+  const icons={info:'📢',alert:'⚠️',profit:'💰',maintenance:'🔧'};
+  if(list){
+    list.innerHTML=items.length?items.map(x=>{
+      const d=new Date(x._ms||0);
+      const ds=d.toLocaleDateString('en-GB',{month:'short',day:'numeric'})+' · '+d.toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'});
+      return `<div class="vip-card"><strong>${icons[x.type]||'📢'} ${(x.title||'Announcement')}</strong><span>${(x.body||'')}</span><div style="font-size:10px;color:var(--subtext);margin-top:6px">${ds}</div></div>`;
+    }).join(''):`<div style="text-align:center;padding:30px;color:var(--subtext)">${curLang==='mm'?'ကြေငြာချက် မရှိသေးပါ။':'No announcements yet.'}</div>`;
+  }
+  const el=document.getElementById('vipAnnounceOverlay');
+  if(el) el.style.display='flex';
+  if(currentUser?.uid){
+    db.collection('users').doc(currentUser.uid).set({lastSeenAnnouncement:Date.now()},{merge:true}).catch(()=>{});
+  }
+  const badge=document.getElementById('vipAnnounceBadge');
+  if(badge) badge.classList.remove('show');
 }
 
 function updateWalletUI(bal){
