@@ -1434,6 +1434,17 @@ body.light .wh-lbl,.wallet-hero .wh-lbl{color:rgba(255,255,255,0.75);}
       <div class="kyc-type-btn" onclick="selectKycType('passport',this)">📔 Passport</div>
       <div class="kyc-type-btn" onclick="selectKycType('license',this)">🚗 License</div>
     </div>
+    <label class="cr-lbl">Document Photos</label>
+    <div class="kyc-photo-row">
+      <div class="kyc-photo-box" id="kycFrontBox" onclick="document.getElementById('kycFrontInput').click()">
+        <span class="phico">🪪</span><span class="phlbl">Front Side<br>(Tap to upload)</span>
+      </div>
+      <div class="kyc-photo-box" id="kycBackBox" onclick="document.getElementById('kycBackInput').click()">
+        <span class="phico">🔄</span><span class="phlbl">Back Side<br>(Tap to upload)</span>
+      </div>
+    </div>
+    <input type="file" id="kycFrontInput" accept="image/*" style="display:none" onchange="handleKycPhotoSelect(this,'front')">
+    <input type="file" id="kycBackInput" accept="image/*" style="display:none" onchange="handleKycPhotoSelect(this,'back')">
     <div style="font-size:12px;color:var(--subtext);line-height:1.6;margin:8px 0 10px">
       Submit your real account details. Admin Dashboard will review and confirm your KYC manually.
     </div>
@@ -3096,6 +3107,21 @@ async function submitWithdraw(){
 // KYC
 // ================================================================
 let selKycType='nrc';
+let kycPhotoFrontData=null, kycPhotoBackData=null;
+async function handleKycPhotoSelect(input,side){
+  if(!input.files||!input.files[0])return;
+  const file=input.files[0];
+  try{
+    const dataUrl=await compressImageToBase64(file,1000,0.75);
+    const box=document.getElementById(side==='front'?'kycFrontBox':'kycBackBox');
+    if(side==='front') kycPhotoFrontData=dataUrl; else kycPhotoBackData=dataUrl;
+    if(box){
+      box.innerHTML=`<img class="kp-preview" src="${dataUrl}" alt="${side}"><span class="phlbl" style="position:absolute;bottom:4px;left:0;right:0;background:rgba(0,0,0,.55);padding:3px;border-radius:0 0 10px 10px">✅ ${side==='front'?'Front':'Back'} uploaded</span>`;
+      box.style.position='relative';
+    }
+  }catch(e){console.warn('KYC photo error:',e);}
+  input.value='';
+}
 async function openKYCModal({skipSync=false}={}){
   rememberKycReturnContext();
   if(!currentUser){
@@ -3110,6 +3136,10 @@ async function openKYCModal({skipSync=false}={}){
   if(kycState==='pending'){
     const pend=document.getElementById('kycPendingOverlay');if(pend)pend.style.display='flex';return;
   }
+  // Reset photo upload state (fresh submission or resubmission after rejection)
+  kycPhotoFrontData=null; kycPhotoBackData=null;
+  const fb=document.getElementById('kycFrontBox'); if(fb) fb.innerHTML=`<span class="phico">🪪</span><span class="phlbl">Front Side<br>(Tap to upload)</span>`;
+  const bb=document.getElementById('kycBackBox'); if(bb) bb.innerHTML=`<span class="phico">🔄</span><span class="phlbl">Back Side<br>(Tap to upload)</span>`;
   const m=document.getElementById('kycModal');if(m)m.style.display='flex';
 }
 function selectKycType(tp,el){selKycType=tp;document.querySelectorAll('.kyc-type-btn').forEach(b=>b.classList.remove('active'));el.classList.add('active');}
@@ -3122,9 +3152,17 @@ async function submitKYC(){
   const idno=document.getElementById('kycIdNum')?.value?.trim()||'';
   const err=document.getElementById('kycErr');
   if(!name||!bod||!ph||!idno){err.textContent='⚠️ All fields required.';return;}
+  if(!kycPhotoFrontData){err.textContent=(curLang==='mm'?'⚠️ မှတ်ပုံတင်/ID ရဲ့ ရှေ့ဘက်ပုံ တင်ပေးပါ။':'⚠️ Please upload the front side of your ID document.');return;}
   err.textContent='Submitting...';
   try{
     const submittedAt=new Date().toISOString();
+    // Save photos to a dedicated collection Admin App reads for review
+    await db.collection('kycPhotos').doc(currentUser.uid).set({
+      photoFront:kycPhotoFrontData,
+      photoBack:kycPhotoBackData||null,
+      docType:selKycType,
+      uploadedAt:submittedAt
+    },{merge:true});
     // Use set+merge so it works even if user doc is missing fields
     await db.collection('users').doc(currentUser.uid).set({
       realName:name,
