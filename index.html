@@ -1370,12 +1370,11 @@ body.light .wh-lbl,.wallet-hero .wh-lbl{color:rgba(255,255,255,0.75);}
     </div>
     <div class="chat-input-row">
     <input type="file" id="imageUpload" accept="image/*" style="display:none;">
-    <i class="fa-solid fa-image"
-       onclick="document.getElementById('imageUpload').click()"
-       style="cursor:pointer;font-size:1.1rem;padding:0 10px;opacity:0.55;flex-shrink:0;display:flex;align-items:center;transition:opacity 0.2s;"
-       onmouseenter="this.style.opacity='1'"
-       onmouseleave="this.style.opacity='0.55'"
-       title="Send photo"></i>
+    <div onclick="document.getElementById('imageUpload').click()"
+       style="cursor:pointer;width:34px;height:34px;flex-shrink:0;display:flex;align-items:center;justify-content:center;border-radius:10px;background:rgba(212,175,55,.12);border:1px solid rgba(212,175,55,.25);transition:background .2s;"
+       onmouseenter="this.style.background='rgba(212,175,55,.22)'"
+       onmouseleave="this.style.background='rgba(212,175,55,.12)'"
+       title="Send photo"><i class="fa-solid fa-image" style="font-size:1rem;color:var(--gold2,#d4af37);"></i></div>
     <div class="chat-inp" contenteditable="true" id="chatInp">Message...</div>
     <div class="chat-send" onclick="sendMsg()">></div>
 </div>
@@ -1684,6 +1683,7 @@ function isVipOrAbove(level){
 // Upgrades user.level automatically based on totalDeposited; never downgrades a manually-set higher level.
 async function maybeAutoUpgradeLevel(uid,data){
   if(!data) return;
+  if(data.levelManualOverride) return; // Admin has manually locked this user's level
   const autoLevel=computeAutoLevel(data.totalDeposited);
   const curIdx=LEVEL_FLOW.indexOf(normalizeLevel(data.level));
   const autoIdx=LEVEL_FLOW.indexOf(autoLevel);
