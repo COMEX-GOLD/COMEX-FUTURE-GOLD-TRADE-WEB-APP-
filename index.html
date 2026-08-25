@@ -1403,6 +1403,7 @@ body.light .wh-lbl,.wallet-hero .wh-lbl{color:rgba(255,255,255,0.75);}
     <div class="tr-row"><span id="resPnlLabel">Trade Profit</span><span class="tr-val" id="resProfit">—</span></div>
     <div style="height:1px;background:var(--b);margin:10px 0"></div>
     <div class="tr-row"><span style="font-weight:700">New Balance</span><span class="tr-val" style="color:var(--gold2);font-weight:700;font-size:15px" id="resTotal">—</span></div>
+    <div style="font-size:9.5px;color:var(--subtext);text-align:center;margin-top:10px" id="resReceiptId">—</div>
     <button class="tr-collect" onclick="closeTradeModal()" id="resCollect">💰 Collect</button>
   </div>
 </div>
@@ -2685,15 +2686,16 @@ function updateRecordUI(hist){
   const s=(id,v)=>{const e=document.getElementById(id);if(e)e.textContent='$'+v;};
   s('recToday',fp(td));s('recWeek',fp(wk));s('recMonth',fp(mo));
   const rl=document.getElementById('recList');
-  if(rl)rl.innerHTML=sorted.slice(0,30).map(x=>{
+  if(rl)rl.innerHTML=sorted.slice(0,30).map((x,i)=>{
     const d=new Date(x.timestamp||0);const ds=d.toLocaleDateString('en-GB',{month:'short',day:'numeric'})+' · '+d.toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'});const w=(x.pnl||0)>=0;
-    return `<div class="rec-item"><div><div class="ri-dir ${x.dir==='BUY'?'buy':'sell'}">${x.dir||'BUY'}</div><div class="ri-pair">${x.symbol||'XAU/USD'}</div><div class="ri-date">${ds}</div></div><div style="text-align:right"><div class="ri-pnl ${w?'up':'dn'}">${w?'+':'-'}$${Math.abs(x.pnl||0).toFixed(2)}</div><div style="font-size:10px;color:var(--subtext)">$${(x.amount||0).toFixed(2)}</div></div></div>`;
+    return `<div class="rec-item" style="cursor:pointer" onclick="openTradeReceipt(window.__recHist[${i}])"><div><div class="ri-dir ${x.dir==='BUY'?'buy':'sell'}">${x.dir||'BUY'}</div><div class="ri-pair">${x.symbol||'XAU/USD'}</div><div class="ri-date">${ds}</div></div><div style="text-align:right"><div class="ri-pnl ${w?'up':'dn'}">${w?'+':'-'}$${Math.abs(x.pnl||0).toFixed(2)}</div><div style="font-size:10px;color:var(--subtext)">$${(x.amount||0).toFixed(2)}</div></div></div>`;
   }).join('');
   const tl=document.getElementById('txList');
-  if(tl)tl.innerHTML=sorted.slice(0,20).map(x=>{
+  if(tl)tl.innerHTML=sorted.slice(0,20).map((x,i)=>{
     const d=new Date(x.timestamp||0);const ds=d.toLocaleDateString('en-GB',{month:'short',day:'numeric'})+' · '+d.toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'});const w=(x.pnl||0)>=0;
-    return `<div class="tx-item"><div class="tx-l"><div class="tx-ico" style="background:rgba(${w?'46,204,113':'255,71,87'},.1)">${w?'📈':'📉'}</div><div><div class="tx-name">${x.dir} ${x.symbol||'XAU/USD'}</div><div class="tx-date">${ds}</div></div></div><div class="tx-amt ${w?'up':'dn'}">${w?'+':'-'}$${Math.abs(x.pnl||0).toFixed(2)}</div></div>`;
+    return `<div class="tx-item" style="cursor:pointer" onclick="openTradeReceipt(window.__recHist[${i}])"><div class="tx-l"><div class="tx-ico" style="background:rgba(${w?'46,204,113':'255,71,87'},.1)">${w?'📈':'📉'}</div><div><div class="tx-name">${x.dir} ${x.symbol||'XAU/USD'}</div><div class="tx-date">${ds}</div></div></div><div class="tx-amt ${w?'up':'dn'}">${w?'+':'-'}$${Math.abs(x.pnl||0).toFixed(2)}</div></div>`;
   }).join('');
+  window.__recHist=sorted;
 }
 
 function updateKycStatus(data){
@@ -2862,7 +2864,7 @@ async function settleTradeResult(tradeId,tData,amount){
       win=liveTrade.status==='win';
       pnl=win ? +(finalAmount*(finalPct/100)).toFixed(2) : -finalAmount;
       newBal=Math.max(0, +(Number(balanceObj.usd||0)+pnl).toFixed(2));
-      entry={dir:liveTrade.dir||'BUY',symbol:liveTrade.symbol||'XAU/USD',amount:finalAmount,pnl,win,profitPct:finalPct,durationSec:finalSec,timestamp:Date.now()};
+      entry={dir:liveTrade.dir||'BUY',symbol:liveTrade.symbol||'XAU/USD',amount:finalAmount,pnl,win,profitPct:finalPct,durationSec:finalSec,timestamp:Date.now(),receiptId:'CMX-'+tradeId.slice(-6).toUpperCase()+'-'+Date.now().toString(36).toUpperCase()};
       const history=Array.isArray(userData.trade_history)?[...userData.trade_history,entry]:[entry];
       tx.update(userRef,{balance:{...balanceObj,usd:newBal},trade_history:history});
       tx.update(tradeRef,{settled:true,resolvedAt:liveTrade.resolvedAt||firebase.firestore.FieldValue.serverTimestamp()});
@@ -2895,13 +2897,40 @@ async function settleTradeResult(tradeId,tData,amount){
     document.getElementById('resProfit').textContent=(win?'+':'-')+'$'+Math.abs(pnl).toFixed(2);
     document.getElementById('resProfit').style.color=win?'var(--up)':'var(--dn)';
     document.getElementById('resTotal').textContent='$'+newBal.toFixed(2);
+    const ridEl=document.getElementById('resReceiptId');if(ridEl)ridEl.textContent='🧾 Receipt: '+(entry?.receiptId||'—');
     const collectBtn=document.getElementById('resCollect');
-    if(collectBtn)collectBtn.style.background=win?'linear-gradient(135deg,#2ecc71,#27ae60)':'linear-gradient(135deg,#e74c3c,#c0392b)';
+    if(collectBtn){collectBtn.textContent='💰 Collect';collectBtn.style.background=win?'linear-gradient(135deg,#2ecc71,#27ae60)':'linear-gradient(135deg,#e74c3c,#c0392b)';}
     m.style.display='flex';
   }catch(e){showToast('Error: '+e.message);}
   resetTradeRuntimeState();
 }
 function closeTradeModal(){const m=document.getElementById('tradeResultModal');if(m)m.style.display='none';const inp=document.getElementById('tradeAmount');if(inp)inp.value='';}
+// Reopen a past trade as a read-only Profit/Loss receipt (from the Record tab)
+function openTradeReceipt(entry){
+  if(!entry)return;
+  const win=!!entry.win;
+  const m=document.getElementById('tradeResultModal');if(!m)return;
+  const resIco=document.getElementById('resIco');
+  if(resIco) resIco.innerHTML=win?'🏆':'<img src="./financial.png" alt="Trade Loss">';
+  document.getElementById('resTitle').textContent=win?'🎉 TRADE WIN!':'📉 TRADE LOSS';
+  document.getElementById('resTitle').style.color=win?'var(--up)':'var(--dn)';
+  const d=new Date(entry.timestamp||0);
+  const timeStr=d.toLocaleDateString('en-GB',{month:'short',day:'numeric'})+' · '+d.toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
+  const sub=document.getElementById('resSubTitle');if(sub)sub.textContent=(entry.symbol||'XAU/USD')+' · '+timeStr;
+  document.getElementById('resUser').textContent=currentUser?.realName||'Trader';
+  const dirEl=document.getElementById('resDir');
+  if(dirEl){dirEl.textContent=(entry.dir||'BUY')+' '+(entry.dir==='BUY'?'📈':'📉');dirEl.style.color=entry.dir==='BUY'?'var(--up)':'var(--dn)';}
+  document.getElementById('resTime').textContent=String(entry.durationSec||'—')+'s';
+  document.getElementById('resAmount').textContent='$'+Number(entry.amount||0).toFixed(2);
+  const pnlLbl=document.getElementById('resPnlLabel');if(pnlLbl)pnlLbl.textContent=win?'Trade Profit':'Trade Loss';
+  document.getElementById('resProfit').textContent=(win?'+':'-')+'$'+Math.abs(entry.pnl||0).toFixed(2);
+  document.getElementById('resProfit').style.color=win?'var(--up)':'var(--dn)';
+  document.getElementById('resTotal').textContent=curLang==='mm'?'📜 မှတ်တမ်း (Past Trade)':'📜 Past Trade Record';
+  const ridEl=document.getElementById('resReceiptId');if(ridEl)ridEl.textContent='🧾 Receipt: '+(entry.receiptId||'—');
+  const collectBtn=document.getElementById('resCollect');
+  if(collectBtn){collectBtn.textContent=curLang==='mm'?'ပိတ်ရန်':'Close';collectBtn.style.background='linear-gradient(135deg,#555,#333)';}
+  m.style.display='flex';
+}
 
 // ================================================================
 // DEPOSIT / WITHDRAW
